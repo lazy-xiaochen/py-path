@@ -1,0 +1,7 @@
+node_modules/
+.npm-cache/
+.vite/
+public/runtime/
+playwright-report/
+test-results/
+.browser-profile/

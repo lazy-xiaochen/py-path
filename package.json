@@ -1,0 +1,33 @@
+{
+  "name": "py-path",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "preview": "vite preview --host 127.0.0.1",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run typecheck && vite build",
+    "test": "node --disable-warning=ExperimentalWarning --test tests/unit.test.ts",
+    "test:e2e": "npm run build && playwright test"
+  },
+  "dependencies": {
+    "codemirror": "6.0.2",
+    "@codemirror/lang-python": "6.2.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.15",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/language": "6.13.1",
+    "@lezer/highlight": "1.2.5",
+    "pyodide": "0.27.7"
+  },
+  "devDependencies": {
+    "vite": "7.3.8",
+    "typescript": "7.0.2",
+    "@types/node": "26.6.6",
+    "@playwright/test": "1.65.1"
+  }
+}

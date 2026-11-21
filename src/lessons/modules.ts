@@ -1,0 +1,250 @@
+import type { Chapter } from '../teaching-types';
+
+export const modules: Chapter = {
+  goals: [
+    '【独立使用】按输入、返回值和业务边界选择标准库工具，读写 import、from import 和 as。',
+    '【独立使用】把单文件计算拆为入口和同目录模块，分别运行入口与工具自测。',
+    '【理解】预测顶层代码与入口判断何时执行，利用异常或额外输出定位导入问题。',
+    '【理解】用普通循环读懂生成器表达式。',
+  ],
+  prerequisites: '会第 2、4 课的数字拆分与循环，第 6 课的列表推导式和元组，第 8 课的函数契约。能先直接调用函数，再通过输入输出核对完整程序。',
+  version: '以平台的 Python 3.12 为准。math.isqrt 从 3.8 提供，math.lcm 从 3.9 提供。本课日期输入统一为 YYYY-MM-DD，示例用随解释器提供的标准库。',
+  topics: [
+    {
+      title: '导入模块并使用其中的名字',
+      explanation: [
+        '模块提供一组可以被其他代码使用的名字，例如函数、常量或类型。import math 先让 Python 查找并取得 math 模块，再把这个模块绑定到当前文件中的 math 名称。math.isqrt 中的点表示从这个模块查找 isqrt。模块各有自己的全局名字空间，所以几个模块能各自定义同名函数。',
+        'from math import isqrt 把模块中的 isqrt 直接绑定在当前作用域，之后可写 isqrt(n)。这条语句本身不会引入 math 这个名字。import math as geometry 则把模块绑定到 geometry，调用形式是 geometry.isqrt(n)。简短名称便于频繁调用，保留模块前缀通常更方便识别来源。',
+        'Python 随安装环境提供标准库。遇到日期运算、整数平方根等通用需求，先查函数签名、返回值和适用范围。平台的课程使用随解释器提供的模块，可在本地离线运行示例。',
+      ],
+      examples: [
+        {
+          id: 'module-gcd', title: '用数学模块把比例约到最简', level: '起步',
+          source: 'import math\n\nleft, right = map(int, input().split())\ncommon = math.gcd(left, right)\nprint(left // common, right // common)',
+          input: '18 24\n', output: '3 4\n',
+          purpose: '观察模块前缀的作用，并把库函数的返回值用在后续计算中。两个输入均为正整数。',
+          steps: ['import math 将 math 绑定为模块名。', 'math.gcd(18, 24) 返回最大公约数 6。', '用同一个 6 分别整除两个输入，得到约分后的 3 和 4。'],
+          pitfall: '只写 import math 时直接调用 gcd(left, right) 会找不到名字 gcd。用 math.gcd 或改成显式的 from 导入。',
+        },
+        {
+          id: 'module-alias', title: '给导入函数取一个表明用途的名字', level: '应用',
+          source: 'from math import isqrt as floor_root\n\nnumber = int(input())\nroot = floor_root(number)\nprint(root)\nprint(root * root <= number < (root + 1) ** 2)',
+          input: '48\n', output: '6\nTrue\n',
+          purpose: '观察 from 与 as 的绑定结果。isqrt 返回不超过精确平方根的最大整数。',
+          steps: ['把 math 中的 isqrt 绑定到当前文件的 floor_root。', '48 的整数平方根是 6，因为 36 ≤ 48 < 49。', '先打印 6，再用链式比较验证这两个边界。'],
+          pitfall: '导入时指定 floor_root 后，此语句不提供原名 isqrt。输入还必须是非负整数。',
+        },
+      ],
+    },
+    {
+      title: '根据返回值和业务规则选择标准库工具',
+      explanation: [
+        '日期字符串适合读写，日期对象适合运算。date.fromisoformat() 可以把本课的 YYYY-MM-DD 转为日期对象；两个日期相减得到 timedelta，再取 .days。给日期加 timedelta(days=1) 会正确处理月底、闰年和跨年。',
+        'weekday() 从周一的 0 数到周日的 6。工作日规则需要程序自己定义，例如把 0–4 当作业务日。工具负责日期换算，程序决定周末是否计入、起始日是否计入。',
+        '普通 median 在数据量为偶数时取中间两项的均值，结果可能从未出现。median_low 在偶数个值时取中间偏小的一项，结果始终来自输入。整数边界也一样，若要比较准确的平方关系，优先用 isqrt 和整数乘法，避免浮点数舍入造成误判。',
+        'P058 先用普通循环读站点：每轮用 sx, sy = map(int, input().split()) 解包，再将 (sx, sy) 追加到 stations。对一个待覆盖点，遍历 stations，把每个平方距离加进列表，最后取 min 得最近的距离平方。用最远的这一项决定半径。已知至少有一个站时，min 有输入。',
+        '读到 min(距离表达式 for sx, sy in stations) 时，对照那个循环。括号中的生成器表达式逐项提供数值给 min，可以省去中间列表。P016 的字号也同理，先写循环、打印结果，再看生成器写法。P019 会用 sum 同样消费逐行产生的 1。',
+      ],
+      examples: [
+        {
+          id: 'module-next-day', title: '跨过闰日一探日历规则', level: '起步',
+          source: 'from datetime import date, timedelta\n\nstart = date.fromisoformat(input())\nend = start + timedelta(days=2)\nprint(end.isoformat())\nprint(end.weekday())',
+          input: '2024-02-28\n', output: '2024-03-01\n4\n',
+          purpose: '把日期文本变成可运算的对象，再转换为输出文本。',
+          steps: ['解析 2024-02-28，得到 date 对象。', '加两天会经过 2 月 29 日，落在 3 月 1 日。', 'isoformat 返回日期字符串。3 月 1 日是周五，weekday 返回 4。'],
+          pitfall: '给日期字符串直接加 2 不会做日历运算。需要先构造 date，再加 timedelta。',
+        },
+        {
+          id: 'module-median', title: '比较普通中位数与低中位数', level: '应用',
+          source: 'import statistics\n\nvalues = list(map(int, input().split()))\nprint(statistics.median(values))\nprint(statistics.median_low(values))',
+          input: '18 3 12 6\n', output: '9.0\n6\n',
+          purpose: '从相似函数中选出满足业务约束的那个，支持任意非空整数行。',
+          steps: ['读到四个值，内部排序后是 3、6、12、18。', 'median 取中间的 6 和 12 的平均，得到 9.0。', 'median_low 取靠左的 6，适用于结果必须是原始值的情形。'],
+          pitfall: '取输入中间的位置不等于取排序后的中间位置。数据为空时两个函数都报 StatisticsError。',
+        },
+        {
+          id: 'module-distance-loop', title: '从距离循环读懂生成器表达式', level: '应用',
+          source: 'from math import isqrt\n\nx, y = map(int, input().split())\nstations = [(0, 0), (3, 4)]\nsquares = []\nfor sx, sy in stations:\n    square = (x - sx) ** 2 + (y - sy) ** 2\n    squares.append(square)\nclosest = min(squares)\ncompact = min((x - sx) ** 2 + (y - sy) ** 2 for sx, sy in stations)\nroot = isqrt(closest)\nif root * root < closest:\n    root += 1\nprint(squares)\nprint(closest, compact, root)\n',
+          input: '2 3\n', output: '[13, 2]\n2 2 2\n',
+          purpose: '从列表和普通循环过渡到逐项产生值的写法，核对 P058 的整数开方。',
+          steps: [
+            '离两个站的平方距离分别是 13 和 2。先收列表再求 min 和让 min 逐个取生成器的值，最小值都是 2。',
+            'isqrt(2) 是 1，半径 1 不足以覆盖平方距离 2，因此增加到 2。',
+            '把待覆盖点改为 3 4，先预测两个平方距离和最小半径。保留普通循环核对简写。',
+          ],
+          pitfall: 'min 所消费的序列必须含有值。删光站点前应先约定无站点如何处理。',
+        },
+      ],
+    },
+    {
+      title: '把同目录的 Python 文件变成自己的模块',
+      explanation: [
+        '把一组相关函数放到另一个 .py 文件后，可以用它的模块名导入。本站把入口文件和辅助文件加载到同一个临时工作目录，并把目录加入搜索路径。badge_text.py 对应 badge_text，写 import badge_text 就能在 main.py 使用其中的函数。',
+        '首次成功导入普通源码模块时，Python 会执行它的顶层语句，包括函数定义和顶层 print。函数体只有调用时才运行。成功导入后的模块对象以模块名缓存于 sys.modules；在同一次解释器会话里，以相同模块名再次导入通常直接取得已有对象。',
+        '本站每次点运行都会用新的解释器执行最新一份文件快照。因此运行内的重复 import 不会重复初始化，修改辅助文件后按运行则会读取新内容。自建文件名宜用易识别的字母与下划线，也应避免与已在使用的标准库模块重名。',
+        'ModuleNotFoundError 时先看错误最后一行点名的是哪个模块，核对工作区内 .py 文件的拼写和位置。如果错误来自辅助文件内部的 import，再沿调用栈检查它依赖的文件。本课编辑器用同一层文件名。模块名的大小写要和文件名对应。',
+        '将单文件拆分时，先圈出不依赖 input 和 print 的函数，例如 label(zone, number)。把定义移到 label_tool.py，在 main.py 导入，保留原来的读入、转换和最终打印。用同一组输入核对拆分前后的结果。',
+      ],
+      examples: [
+        {
+          id: 'module-edit-label', title: '把展签格式放进辅助文件', level: '起步',
+          source: 'from badge_text import make_label\n\nzone, number = input().split()\nprint(make_label(zone, int(number)))',
+          files: [{ name: 'badge_text.py', content: 'def make_label(zone, number):\n    return f"{zone}-{number:02d}"\n' }],
+          input: 'B 7\n', output: 'B-07\n',
+          purpose: '让入口读写数据，辅助模块维护格式。展开后可切换 badge_text.py 修改格式并运行。',
+          steps: ['main.py 通过模块名 badge_text 查找同目录的辅助文件。', '导入时定义 make_label，调用时才格式化。02d 表示整数宽度至少两位，用 0 补齐。', '入口从标准输入读到 B 和 7，调用函数得到 B-07。可把辅助文件里的 - 改为 /，再运行看差异。'],
+          pitfall: '写 from badge_text.py import make_label 会把点当成层级语法。文件后缀仍为 .py，导入时写 badge_text 即可。',
+        },
+        {
+          id: 'module-import-once', title: '跟踪同一次运行里重复导入的顺序', level: '应用',
+          source: 'print("开始")\nimport demo_counter\nimport demo_counter as same_module\nprint(demo_counter is same_module)\nprint(same_module.double(5))',
+          files: [{ name: 'demo_counter.py', content: 'print("载入模块")\n\n\ndef double(number):\n    return number * 2\n' }],
+          input: '', output: '开始\n载入模块\nTrue\n10\n',
+          purpose: '用一次有意保留的顶层输出观察加载，验证两种绑定是否拿到同一个对象。',
+          steps: ['入口先打印“开始”。首次导入时辅助文件打印“载入模块”并定义函数。', '第二次导入同一模块名只绑定别名。is 检查两个名字是否指向同一个对象，结果为 True。', '调用辅助函数得到 10。在本站再次点运行时，整个过程会从头开始。'],
+          pitfall: '不要依赖多次 import 去反复运行初始化。适合重复执行的动作应放进函数并显式调用。',
+        },
+        {
+          id: 'module-missing-name', title: '按异常消息修正辅助模块名', level: '应用',
+          source: 'from label_tools import label\n\nzone, raw = input().split()\nprint(label(zone, int(raw)))\n',
+          files: [
+            { name: 'label_tool.py', content: 'def label(zone, number):\n    return f"{zone}-{number:02d}"\n\n\nif __name__ == "__main__":\n    assert label("B", 7) == "B-07"\n    assert label("A", 0) == "A-00"\n    print("两组自测通过")\n' },
+          ],
+          input: 'B 7\n', output: '',
+          diagnostic: { kind: 'ModuleNotFoundError', file: 'main.py', line: 1 },
+          purpose: '运行一次失败的导入，从消息里的名字找到工作区已有的文件。',
+          steps: [
+            '导入请求的是 label_tools，而文件列表里只有 label_tool.py。解释器在第一行抛出 ModuleNotFoundError。',
+            '程序还没执行 input，因此没有标准输出。点击错误位置，比较导入名和辅助文件名。',
+            '把首行改成 from label_tool import label，保持两份文件均在同一层，再运行，应输出 B-07。也可载入「拆分标签入口与工具自测」对照。',
+          ],
+          pitfall: '不要给导入名加 .py。移动到另一个目录时也要确认解释器搜索路径。',
+        },
+      ],
+    },
+    {
+      title: '区分入口执行与被导入',
+      explanation: [
+        '直接运行入口文件时，Python 将入口的 __name__ 设为 "__main__"。被导入的普通模块用自己的模块名。比较 if __name__ == "__main__": 可以让直接运行专属的代码放在条件内部，同时让外部程序取得模块中定义的工具。',
+        '组织一个小程序时，可以让 main() 处理标准输入和输出，让辅助函数接收数据并返回结果。在顶层定义函数，在入口判断里调用 main()。每个文件只有真正属于入口的动作才放到这个分支里。顶层的其他语句仍然在导入时执行。',
+        '调试导入问题时，先检查模块文件是否在工作区，再看导入语句给当前文件绑定了什么名字。出现额外输出或意外等待输入时，沿 import 去看辅助文件的顶层语句。评测程序应只输出题面要求的内容。',
+        '直接运行工具文件时，它也可以有一段独立自测。第 11 课会详讲 assert。这里先把 assert 实际值 == 预期值 读作一次核对，条件为假会停在失败的检查。直接执行和被导入时分别跑一次，检查是否发生额外读入或输出。',
+        '拓展主题包括包的层次、第三方库和虚拟环境。基础篇先在平台用随解释器提供的标准库与同目录工具文件。',
+      ],
+      examples: [
+        {
+          id: 'module-main-entry', title: '把读写集中在 main 函数', level: '起步',
+          source: 'def total_minutes(hours, minutes):\n    return hours * 60 + minutes\n\n\ndef main():\n    hours, minutes = map(int, input().split())\n    print(total_minutes(hours, minutes))\n\n\nif __name__ == "__main__":\n    main()',
+          input: '2 15\n', output: '135\n',
+          purpose: '看见入口执行会进入条件分支，同时让换算函数适合在其他程序复用。',
+          steps: ['执行两个 def，创建换算函数与 main。', '当前是直接运行的入口，__name__ 为 "__main__"，调用 main。', 'main 读到 2 小时 15 分，把 135 写到输出。'],
+          pitfall: '把 main() 写到顶层时，导入该文件也会尝试读取标准输入。入口判断后要正确缩进。'
+        },
+        {
+          id: 'module-guard-import', title: '导入工具时跳过模块里的演示', level: '应用',
+          source: 'import station_label\n\nname = input()\nprint(station_label.label(name))\nprint(station_label.__name__)',
+          files: [{ name: 'station_label.py', content: 'def label(name):\n    return "登记 " + name\n\n\nif __name__ == "__main__":\n    print(label("测试"))\n' }],
+          input: '小舟\n', output: '登记 小舟\nstation_label\n',
+          purpose: '让模块保留独立运行的演示，并让使用者导入时只取得所需函数。',
+          steps: ['导入 station_label 时定义 label。模块的 __name__ 是 station_label，入口条件不成立。', 'main.py 读到小舟并调用 label，输出“登记 小舟”。', '读取模块的 __name__ 得到 station_label，验证它这次的角色。'],
+          pitfall: '把最后的 print 移出入口判断会让导入也输出“登记 测试”。额外行会影响标准输出评测。',
+        },
+        {
+          id: 'module-single-label', title: '在单个文件生成区域标签', level: '起步',
+          source: 'def label(zone, number):\n    return f"{zone}-{number:02d}"\n\n\ndef main():\n    zone, raw = input().split()\n    print(label(zone, int(raw)))\n\n\nif __name__ == "__main__":\n    main()\n',
+          input: 'B 7\n', output: 'B-07\n',
+          purpose: '在一个 main.py 中完成读入、整数转换和标签输出。区域与编号由空白分隔。02d 让整数至少显示两位，不足时补零。',
+          steps: [
+            '运行 main.py 时先定义 label 和 main。入口条件成立，才调用 main 读取一行标准输入。',
+            '把输入拆成区域 B 和编号文本 7，用 int 转成整数，再调用 label。它交回 B-07，由 main 打印。',
+            '把输入改成 A 0，先预测 A-00 再运行。接着载入下一个示例，分别用这两组输入验证拆分后的结果。',
+          ],
+          pitfall: '输入读写放在 main，label 只接收区域和整数并返回标签，这样移动函数后仍可用同样的参数单独检查。',
+        },
+        {
+          id: 'module-split-label', title: '拆分标签入口与工具自测', level: '应用',
+          source: 'from label_tool import label\n\n\ndef main():\n    zone, raw = input().split()\n    print(label(zone, int(raw)))\n\n\nif __name__ == "__main__":\n    main()\n',
+          files: [
+            { name: 'label_tool.py', content: 'def label(zone, number):\n    return f"{zone}-{number:02d}"\n\n\nif __name__ == "__main__":\n    assert label("B", 7) == "B-07"\n    assert label("A", 0) == "A-00"\n    print("两组自测通过")\n' },
+          ],
+          input: 'B 7\n', output: 'B-07\n',
+          purpose: '把上一示例的 label 定义从 main.py 移到同目录的 label_tool.py。在 main.py 原定义的位置加导入语句，保留主函数、读入、转换、调用、打印和入口判断。',
+          steps: [
+            '导入时执行工具文件中的 def，得到 label；工具文件这时名为 label_tool，它不运行入口判断内的测试。',
+            'main.py 直接执行时调用 main，处理与单文件版相同的一行输入。B 7 只输出 B-07，A 0 只输出 A-00。',
+            '将 label_tool.py 的完整代码复制到在线工作台并选它为运行入口。此时 __name__ 为 "__main__"，两条 assert 会检查返回值，全部通过后输出“两组自测通过”。',
+            '把工具中的最后一条 print 取消缩进，再运行原入口。导入时出现“两组自测通过”，但两条 assert 仍在入口判断内，这次并未执行。恢复缩进，确认再次运行只输出 B-07。',
+          ],
+          pitfall: '库工具把数据作为参数接收。顶层直接读输入或打印演示，会给导入它的入口添加意外行为。',
+        },
+      ],
+    },
+  ],
+  exercises: [
+    { kind: 'coding', problem: 'P077', level: '综合应用', goal: '从两个起始文件完成入口与报价函数，分别通过导入调用和脚本测试。' },
+    {
+      kind: 'question', id: 'module-local-name', legacy: 'explain', goal: '把磁盘文件名与导入语句中的模块名对应起来。',
+      prompt: '同目录有 tools.py，想在入口引入该模块时应该写什么？', answer: 1,
+      options: [
+        { label: 'import tools.py', feedback: '导入中的点表示模块层级，文件名后缀不用写。' },
+        { label: 'import tools', feedback: 'Python 按模块名 tools 查找同目录的 tools.py，并在当前作用域绑定 tools。' },
+        { label: 'open(tools)', feedback: 'open 用于打开文件，不会执行并绑定模块。' },
+      ],
+    },
+    {
+      kind: 'question', id: 'module-qualified-call', legacy: 'predict', goal: '根据 import math 知道当前作用域新增的名字。',
+      prompt: '仅执行 import math 后，要怎样调用 math 里求平方根的函数？', answer: 1,
+      options: [
+        { label: 'sqrt(9)', feedback: '这需要先用 from math import sqrt 等方式绑定 sqrt。' },
+        { label: 'math.sqrt(9)', feedback: 'import math 绑定模块名 math，点号从这个模块找到 sqrt。' },
+        { label: 'math(9)', feedback: 'math 是模块，调用位置应该使用某个具体函数。' },
+      ],
+    },
+    {
+      kind: 'question', id: 'module-same-binding', goal: '推断使用别名重复导入时会得到什么对象。',
+      prompt: '下面两次导入后，比较两个模块对象会输出什么？', answer: 0,
+      demonstration: { source: 'import math\nimport math as geometry\nprint(math is geometry)', input: '', output: 'True\n' },
+      options: [
+        { label: 'True', feedback: '两次使用的模块名都是 math。别名只改变当前文件中的绑定，这两个名字指向同一个模块。' },
+        { label: 'False', feedback: 'as 没有复制模块。它把当前已有的模块对象绑定到另一个名字。' },
+        { label: 'NameError', feedback: '两行导入分别提供 math 和 geometry，两个名字都能使用。' },
+      ],
+    },
+    {
+      kind: 'question', id: 'module-entry-role', goal: '识别入口自己的名字与被导入模块的名字。',
+      prompt: '在本站按运行直接执行下列代码，输出是什么？', answer: 2,
+      demonstration: { source: 'import statistics\nprint(__name__, statistics.__name__)', input: '', output: '__main__ statistics\n' },
+      options: [
+        { label: 'main statistics', feedback: '入口文件即便叫 main.py，直接运行时的 __name__ 也为 "__main__"。' },
+        { label: '__main__ __main__', feedback: '只有执行入口用 "__main__"。导入的标准库模块仍保留自己的名字。' },
+        { label: '__main__ statistics', feedback: '第一个是当前入口的名字，第二个是被导入模块的名字。它们可以各自用入口判断。' },
+      ],
+    },
+    { kind: 'coding', problem: 'P017', level: '基础编程', goal: '把两个周期首次对齐的时间建模为最小公倍数。' },
+    { kind: 'coding', problem: 'P055', level: '基础编程', starterExample: 'module-alias', goal: '用整数平方根找能铺成的最大正方形，同时输出剩余材料数。' },
+    { kind: 'coding', problem: 'P018', level: '综合应用', goal: '解析日期并求非负天数，重点检查闰年、世纪年和反向日期。' },
+    { kind: 'coding', problem: 'P057', level: '综合应用', goal: '选用确保结果是原始读数的统计函数，再统计上、下读数数量。' },
+    { kind: 'coding', problem: 'P056', level: '拓展挑战', goal: '把日期运算与工作日计数结合，避免把起始日和周末算进去。' },
+    { kind: 'coding', problem: 'P058', level: '拓展挑战', goal: '先比较平方距离，再用标准库求能覆盖所有观测点的最小整数半径。' },
+  ],
+  mistakes: [
+    { symptom: '明明导入了 math，调用 sqrt 却出现 NameError。', reason: 'import math 绑定的是模块名。', fix: '用 math.sqrt，或显式 from math import sqrt。', check: '把导入语句写出的当前名字与出错行逐个对应。' },
+    { symptom: '找不到辅助模块，或加载了与意图不同的模块。', reason: '文件没在当前工作区、文件名和导入名不匹配，或自定义文件和标准库重名。', fix: '用可区分的模块名，将辅助文件和入口一起放在工作区。', check: '核对文件列表、模块名和后缀。普通源码模块可查看其 __file__ 辅助判断来源。' },
+    { symptom: '刚 import 就多输出一行，或提前耗掉一行输入。', reason: '辅助模块把 print 或 input 写在顶层。首次导入会执行这些语句。', fix: '把顶层动作移入函数，将直接运行的入口调用放到 __name__ 判断里。', check: '用一个只导入该模块的最小入口验证没有意外读写。' },
+  ],
+  summary: [
+    '按函数签名、返回结果和数据边界选标准库工具。普通循环与生成器表达式可用同一组数据互相核对。',
+    '入口负责读写，辅助模块定义可复用工具。对照文件名、模块名和搜索目录排查导入失败。',
+    '分别检查直接运行和作为模块导入。模块内自测放进入口判断，保持导入后的输出符合约定。',
+  ],
+  next: '下一课会把程序的结果写进文本、CSV 和 JSON 文件，并用读回结果检验保存和转换的规则。',
+  references: [
+    { title: 'Python 3.12 语言参考 · 导入系统', url: 'https://docs.python.org/3.12/reference/import.html#the-module-cache', note: '核对按模块名缓存对象以及再次导入的行为。' },
+    { title: 'Python 3.12 标准库 · 数论与表示函数', url: 'https://docs.python.org/3.12/library/math.html#number-theoretic-and-representation-functions', note: '核对 gcd、lcm、isqrt 的约束、版本和整数结果。' },
+    { title: 'Python 3.12 标准库 · 日期与间隔', url: 'https://docs.python.org/3.12/library/datetime.html#date-objects', note: '核对日期对象的解析、运算和星期编号。' },
+    { title: 'Python 3.12 标准库 · 中位数', url: 'https://docs.python.org/3.12/library/statistics.html#statistics.median_low', note: '核对偶数个数据时低中位数和普通中位数的区别。' },
+    { title: 'Python 3.12 教程 · 作为脚本运行模块', url: 'https://docs.python.org/3.12/tutorial/modules.html#executing-modules-as-scripts', note: '核对入口和被导入时的 __name__，以及仅直接运行时触发的自测。' },
+    { title: 'Python 3.12 教程 · 模块搜索路径', url: 'https://docs.python.org/3.12/tutorial/modules.html#the-module-search-path', note: '核对脚本目录、搜索顺序以及与标准库同名时的影响。' },
+    { title: 'Python 3.12 语言参考 · 生成器表达式', url: 'https://docs.python.org/3.12/reference/expressions.html#generator-expressions', note: '核对表达式先提供可迭代结果，值随后由 min 或 sum 逐项取得。' },
+  ],
+};
