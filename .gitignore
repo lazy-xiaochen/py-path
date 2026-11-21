@@ -5,3 +5,5 @@ public/runtime/
 playwright-report/
 test-results/
 .browser-profile/
+dist/
+.env
