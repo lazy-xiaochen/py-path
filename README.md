@@ -1,6 +1,6 @@
 # Py径
 
-Py径是可在浏览器中学习和练习 Python 的静态站点，包括 12 节基础课程、23 节进阶课程、题库和综合项目。在线编辑器使用 Pyodide 0.27.7 运行 Python 3.12.7。
+Py径是可在浏览器中学习和练习 Python 的静态站点，包括 12 节基础课程、23 节进阶课程、题库和综合项目。在线编辑器使用 Pyodide 0.27.7 运行 Python 3.12.7。在线体验：https://lazy-xiaochen.github.io/py-path/
 
 ## 本地启动
 
