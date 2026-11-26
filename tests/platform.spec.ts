@@ -319,7 +319,7 @@ test('升级课听讲、作答反馈、示例修改及刷新恢复', async ({ pa
   await expect(code(page)).toContainText('city = input()');
   await page.goto('./#learn');
   await expect(page.getByRole('link', { name: /让 Python 开口说话/ })).toContainText('2 / 8');
-  await expect(page.locator('.lesson-card')).toHaveCount(12);
+  await expect(page.locator('#foundation-courses .lesson-card')).toHaveCount(12);
 });
 
 test('历史课程与通过记录可继续使用，知识错题可按知识点重做', async ({ page }) => {
@@ -643,6 +643,23 @@ const rejectedOutputs = [
   { id: 'P062', input: '1\nA |注|\n', expected: 'A \n1\n', actual: 'A\n1\n', before: 'print(line, end="")', after: 'print(line.rstrip())' },
 ];
 
+test('静态子路径 · 恢复旧草稿并提交，基础课程进度持久化', async ({ page }) => {
+  const problem = problems.find(item => item.id === 'P002')!;
+  await page.addInitScript(({ source }) => {
+    if (!localStorage.getItem('py-path.v1')) {
+      localStorage.setItem('py-path.v1', JSON.stringify({ drafts: { P002: source } }));
+    }
+  }, { source: problem.solution });
+  await page.goto('./#problem/P002');
+  await expect(code(page)).toContainText(problem.solution.split('\n')[0]);
+  await submit(page).click();
+  await expect(result(page)).toContainText('通过 · AC');
+  await page.getByRole('link', { name: '本题所属课程' }).click();
+  await expect(page.locator('[data-lesson-completed]')).toHaveText('已完成 1 / 8 练习');
+  await page.reload();
+  await expect(page.locator('[data-lesson-completed]')).toHaveText('已完成 1 / 8 练习');
+});
+
 for (const { id, input, expected, actual, before, after } of rejectedOutputs) {
   test('本轮回归 · 正式提交拒绝已知错误 ' + id + ' · ' + input.trim().replaceAll('\n', '/'), async ({ page }) => {
     const problem = problems.find(item => item.id === id)!;
@@ -721,9 +738,10 @@ test('基础篇十二节导航、四大学习入口和项目可用', async ({ pa
     await expect(navigation.getByRole('link', { name, exact: true })).toBeVisible();
   }
   await navigation.getByRole('link', { name: '从零开始', exact: true }).click();
-  await expect(page.locator('.lesson-card')).toHaveCount(12);
+  const foundation = page.locator('#foundation-courses .lesson-card');
+  await expect(foundation).toHaveCount(12);
   await expect(page.locator('.learning-overview')).toContainText('0 / ' + lessons.reduce((total, _, index) => total + required(index), 0) + ' 个学习检查与练习');
-  await page.locator('.lesson-card').first().click();
+  await foundation.first().click();
   for (const [index, lesson] of lessons.entries()) {
     await expect(page.getByRole('heading', { name: `第 ${index + 1} 课 · ${lesson.title}`, exact: true })).toBeVisible();
     if (index < lessons.length - 1) await page.getByRole('link', { name: '下一课 →' }).click();
@@ -802,7 +820,7 @@ for (const project of projects) {
       await expect(stdout(page)).toHaveText('净额 0');
       await submit(page).click();
       await expect(result(page)).toContainText('通过 5 / 5 组', { timeout: 60000 });
-    } else {
+    } else if (project.id === 'words') {
       await page.getByLabel('标准输入').fill('1\n');
       await run(page).click();
       await expect(stdout(page)).toHaveText('wind 3');
@@ -927,9 +945,9 @@ test('最终验收 · 学习修改、章内订正、章外迁移和结项提交'
 
   await navigation.getByRole('link', { name: '题库练习' }).click();
   await page.getByRole('link', { name: '章外练习', exact: true }).click();
-  await expect(page.getByText('共 6 道题')).toBeVisible();
+  await expect(page.getByText('共 10 道题')).toBeVisible();
   await page.getByRole('link', { name: '入门迁移', exact: true }).click();
-  await expect(page.getByText('共 1 道题')).toBeVisible();
+  await expect(page.getByText('共 2 道题')).toBeVisible();
   await page.getByRole('link', { name: '夜场巡检发车牌' }).click();
   await expect(page.getByText('章外练习 · 入门迁移')).toBeVisible();
   await code(page).fill(problemById('P081').solution);

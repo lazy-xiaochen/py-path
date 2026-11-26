@@ -1,5 +1,6 @@
-import { lessons, type Problem } from './content';
+import { lessons, type Problem, type ProjectBrief } from './content';
 import { chapterExamples, chapters } from './chapters';
+import { advancedLessonRoute, advancedLessons } from './advanced';
 import { advice, exactOutputDifference, normalizeOutput } from './judge';
 import { compare, executionUI, restoredRunHeading } from './execution';
 import { runTask } from './assessment';
@@ -39,13 +40,36 @@ function solutionMarkup(problem: Problem) {
     </div>`;
 }
 
-export function problemPage(problem: Problem, modify: boolean, main: HTMLElement, projectWorkspace?: Workspace) {
+function projectBriefMarkup(brief: ProjectBrief) {
+  const items = (entries: string[]) => '<ul>' + entries.map(entry => '<li>' + h(entry) + '</li>').join('') + '</ul>';
+  return `<details open><summary>项目实施路线</summary>
+    <h3>技术与功能要求</h3>${items(brief.requirements)}
+    <h3>需求分析与设计</h3>${items(brief.design)}
+    <h3>分阶段实现</h3>
+    <ol>${brief.stages.map(stage => `<li><strong>${h(stage.title)}</strong>
+      <p>${h(stage.work)}</p><p>自测 · ${h(stage.check)}</p></li>`).join('')}</ol>
+    <h3>验收清单</h3>${items(brief.checklist)}
+    <h3>拓展挑战</h3>${items(brief.extensions)}
+  </details>`;
+}
+
+export function problemPage(problem: Problem, modify: boolean, main: HTMLElement, projectWorkspace?: Workspace,
+  projectBrief?: ProjectBrief) {
   const [sampleInput, sampleOutput, sampleExplanation, sampleChecks] = problem.sample;
+  const interfaceSample = problem.contract?.kind === 'function' &&
+    sampleChecks?.fixtures?.some(file => file.name === problem.contract?.target?.module + '.py');
   const lessonIndex = lessons.findIndex(lesson => lesson.tag === problem.tag);
   const lesson = lessons[lessonIndex];
+  const advancedLesson = advancedLessons.find(item => item.tag === problem.tag);
+  const lessonUrl = advancedLesson ? advancedLessonRoute(advancedLesson) : 'learn/' + (lessonIndex + 1);
+  const bankUrl = advancedLesson ? 'bank/advanced/' + encodeURIComponent(advancedLesson.tag) :
+    problem.practice ? 'bank/independent' : 'bank';
   const resultKey = (projectWorkspace ? 'project:' : 'problem:') + problem.id;
+  const returnUrl = projectBrief ? 'projects' : projectWorkspace ? 'learn' : bankUrl;
+  const returnLabel = projectBrief ? '综合项目' : projectWorkspace ? '学习路径' : '题库';
+  const lessonLabel = projectBrief ? '项目先修课程' : projectWorkspace ? '回顾综合应用' : '本题所属课程';
   main.innerHTML = `
-    <div class="problem-crumbs"><a class="inline-link" href="${projectWorkspace ? '#learn' : problem.practice ? '#bank/independent' : '#bank'}">← ${projectWorkspace ? '学习路径' : '题库'}</a><a class="inline-link" href="#learn/${lessonIndex + 1}">${projectWorkspace ? '回顾综合应用' : '本题所属课程'}</a></div>
+    <div class="problem-crumbs"><a class="inline-link" href="#${returnUrl}">← ${returnLabel}</a><a class="inline-link" href="#${lessonUrl}">${lessonLabel}</a></div>
     <div class="problem-heading"><h1>${projectWorkspace ? '' : '<code>' + h(problem.id) + '</code> '}${h(problem.title)}</h1>
       <span class="difficulty ${difficultyClass(problem.difficulty)}">${problem.difficulty}</span><span class="tag">${problem.tag}</span>
       <span class="tag">${originLabel(problem)}</span><span class="tag" id="personal">${personal(problem)}</span></div>
@@ -55,6 +79,7 @@ export function problemPage(problem: Problem, modify: boolean, main: HTMLElement
       <article class="surface problem-panel statement" data-area="0" aria-label="题面">
         ${problem.background ? '<h2>题目背景</h2><p>' + h(problem.background) + '</p>' : ''}
         <h2>题目描述</h2><p>${h(problem.description)}</p>
+        ${projectBrief ? projectBriefMarkup(projectBrief) : ''}
         ${problem.practice ? '<h3>章外练习 · ' + h(problem.practice.tier) + '</h3><p>先修 ' +
           h(problem.practice.prerequisites) + '</p><p>主要知识 ' + h(problem.practice.primary.join('、')) +
           '。次要知识 ' + h(problem.practice.secondary.join('、')) + '。</p>' : ''}
@@ -62,19 +87,20 @@ export function problemPage(problem: Problem, modify: boolean, main: HTMLElement
         <h2>输出格式</h2><p>${h(problem.output)}</p>
         ${problem.outputComparison === 'exact' ? '<p>本题精确比较文本。LF、CRLF 和 CR 视为同一种换行，保留行首、行内和行尾空白以及空行。最后一行的结束换行可省略。</p>' : ''}
         <div class="section-heading"><h2>样例</h2><button class="button secondary" type="button" id="sample-run">试跑样例</button></div>
-        <div class="comparison samples">
+        ${interfaceSample ? '<p>样例直接导入你的代码，检查返回值、对象状态或回调记录。</p>' : `<div class="comparison samples">
           <div><div class="section-heading"><h3>样例输入</h3><button class="link-button" type="button" id="copy-input">复制输入</button></div>${codeBlock(sampleInput)}</div>
           <div><div class="section-heading"><h3>样例输出</h3><button class="link-button" type="button" id="copy-output">复制输出</button></div>${codeBlock(sampleOutput)}</div>
-        </div>
+        </div>`}
         <h2>样例解释</h2><p>${h(sampleExplanation)}</p>
-        ${sampleChecks?.calls ? '<h3>样例调用与返回值</h3>' + codeBlock(sampleChecks.calls.map(call =>
+        ${sampleChecks?.calls && !interfaceSample ? '<h3>样例调用与返回值</h3>' + codeBlock(sampleChecks.calls.map(call =>
           problem.contract?.target?.name + '(' + call.args.map(arg => JSON.stringify(arg)).join(', ') + ') → ' +
           JSON.stringify(call.expected)).join('\n')) : ''}
-        ${(sampleChecks?.fixtures ?? []).map(file => '<h3>样例输入文件 ' + h(file.name) + '</h3>' +
+        ${(sampleChecks?.fixtures ?? []).map(file => '<h3>' + (interfaceSample ? '样例检查代码' : '样例输入文件 ' + h(file.name)) + '</h3>' +
           codeBlock(file.content)).join('')}
         ${(sampleChecks?.artifacts ?? []).map(file => '<h3>样例产物 ' + h(file.name) + '</h3>' +
           codeBlock(file.content)).join('')}
         <h2>数据范围</h2><p>${h(problem.limits)}</p>
+        ${advancedLesson && problem.guide ? '<h2>考查知识点</h2><p>' + h(problem.guide.concepts.join('、')) + '</p>' : ''}
         ${originMarkup(problem)}
         <details><summary>提示 1 · 思路</summary><p>${h(problem.hints[0])}</p></details>
         <details><summary>提示 2 · 实现</summary><p>${h(problem.hints[1])}</p></details>
@@ -86,11 +112,13 @@ export function problemPage(problem: Problem, modify: boolean, main: HTMLElement
         <details class="history"><summary>评测记录</summary><div id="attempts"></div></details>
       </section>
     </div>`;
-  const chapter = chapters[problem.tag];
+  const chapter = advancedLesson?.chapter ?? chapters[problem.tag];
   const exercise = chapter?.exercises.find(item => item.kind === 'coding' && item.problem === problem.id);
   const template = chapter && exercise?.kind === 'coding' ?
     chapterExamples(chapter).find(example => example.id === exercise.starterExample)?.source : undefined;
-  const starter = modify ? template ?? (lesson.exampleFiles ? 'import math\n\n# 按题意调整模块调用和输入输出\n' : lesson.example) : '# 在此编写解法\n';
+  const blank = '# 在此编写解法\n';
+  const starter = modify ? template ?? (lesson?.exampleFiles ?
+    'import math\n\n# 按题意调整模块调用和输入输出\n' : lesson?.example ?? blank) : blank;
   const structured = problem.starterFiles ?? (problem.contract ? [{ name: 'main.py', content: starter }] : undefined);
   const workspace = projectWorkspace ?? (structured ? (data.taskWorkspaces[problem.id] ??= {
     files: structured.map(file => ({ ...file })), active: 'main.py', entry: 'main.py', input: sampleInput,
@@ -158,8 +186,10 @@ export function problemPage(problem: Problem, modify: boolean, main: HTMLElement
     saveDraft();
     void trial();
   });
-  must<HTMLButtonElement>(main, '#copy-input').onclick = event => void copy(event.currentTarget as HTMLButtonElement, sampleInput);
-  must<HTMLButtonElement>(main, '#copy-output').onclick = event => void copy(event.currentTarget as HTMLButtonElement, sampleOutput);
+  if (!interfaceSample) {
+    must<HTMLButtonElement>(main, '#copy-input').onclick = event => void copy(event.currentTarget as HTMLButtonElement, sampleInput);
+    must<HTMLButtonElement>(main, '#copy-output').onclick = event => void copy(event.currentTarget as HTMLButtonElement, sampleOutput);
+  }
   ui.submitButton!.addEventListener('click', () => void ui.act(async signal => {
     selectPanel(2);
     saveDraft();

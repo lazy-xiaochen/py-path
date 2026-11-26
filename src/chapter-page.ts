@@ -1,9 +1,9 @@
 import { chapterExamples } from './chapters';
-import { lessons, problems } from './content';
+import { allProblems, lessons } from './content';
 import { workspaceConsole } from './execution';
-import { accuracy, lessonStats, questionSolved } from './learning';
+import { accuracy, chapterStats, questionSolved } from './learning';
 import { data, forgetRun, recordChoice, save, type Workspace } from './storage';
-import { exerciseLevels, type Chapter, type Example, type Question } from './teaching-types';
+import { advancedExerciseLevels, exerciseLevels, type Chapter, type Example, type Question } from './teaching-types';
 import { codeBlock, h, must } from './ui';
 
 const items = (values: string[], tag: 'ul' | 'ol' = 'ul') =>
@@ -31,7 +31,7 @@ function exampleMarkup(example: Example) {
     </details>`;
 }
 
-function questionMarkup(index: number, question: Question) {
+function questionMarkup(index: number | undefined, question: Question) {
   const previous = data.questions[question.id];
   const last = previous?.lastChoice;
   const completed = questionSolved(index, question);
@@ -55,19 +55,23 @@ function workspaceFor(example: Example): Workspace {
   };
 }
 
-export function mountChapter(root: HTMLElement, index: number, chapter: Chapter, questionId?: string) {
+export function mountChapter(root: HTMLElement, id: number | string, chapter: Chapter, questionId?: string, navigation?: string) {
+  const index = typeof id === 'number' ? id : undefined;
   const examples = chapterExamples(chapter);
   const questions = chapter.exercises.filter(exercise => exercise.kind === 'question');
   const coding = chapter.exercises.filter(exercise => exercise.kind === 'coding');
   const warmups = coding.filter(exercise => exercise.warmup);
+  const levels = index === undefined ? advancedExerciseLevels : exerciseLevels;
   const practiceList = (exercises: typeof coding) => exercises.map(exercise => {
-    const problem = problems.find(item => item.id === exercise.problem)!;
+    const problem = allProblems.find(item => item.id === exercise.problem)!;
     const suffix = exercise.starterExample ? '/modify' : '';
     return `<li><div><a class="inline-link" href="#problem/${problem.id}${suffix}">${problem.id} ${h(problem.title)} →</a>
       <p>${h(exercise.goal)}</p></div>
       <span class="tag">${data.solved[problem.id] ? '已通过' : data.mistakes[problem.id] ? '待重做' : problem.difficulty}</span></li>`;
   }).join('');
+  const comparisons = chapter.comparisons;
   root.innerHTML = `
+    ${chapter.introduction ? '<section class="surface lesson-stage"><h2>课程导入</h2><p>' + h(chapter.introduction) + '</p></section>' : ''}
     <section class="surface lesson-stage chapter-overview"><div class="section-heading">
       <h2>学习目标</h2><span class="tag" data-lesson-completed></span></div>
       ${items(chapter.goals)}
@@ -84,8 +88,15 @@ export function mountChapter(root: HTMLElement, index: number, chapter: Chapter,
     <section class="surface lesson-stage chapter-theory"><h2 id="chapter-theory" tabindex="-1"><span>1</span>讲解</h2>
       ${chapter.topics.map(topic => `<article class="chapter-topic"><h3>${h(topic.title)}</h3>
         ${topic.explanation.map(paragraph => '<p>' + h(paragraph) + '</p>').join('')}
+        ${topic.diagram ? '<figure class="chapter-diagram"><figcaption>' + h(topic.diagram.caption) +
+          '</figcaption>' + codeBlock(topic.diagram.text) + '</figure>' : ''}
         <div class="study-examples">${topic.examples.map(exampleMarkup).join('')}</div>
       </article>`).join('')}
+      ${comparisons ? `<article class="chapter-topic"><h3>对比与辨析</h3><div class="table-scroll">
+        <table><thead><tr>${comparisons.headings.map(heading => '<th scope="col">' + h(heading) + '</th>').join('')}</tr></thead>
+        <tbody>${comparisons.rows.map(row => '<tr>' + row.map(cell => '<td>' + h(cell) + '</td>').join('') + '</tr>').join('')}</tbody>
+        </table></div></article>` : ''}
+      ${chapter.applications ? '<article class="chapter-topic"><h3>实际应用</h3>' + items(chapter.applications) + '</article>' : ''}
     </section>
     <section class="surface lesson-stage chapter-editor">
       <h2 id="example-workspace-title" tabindex="-1"><span>2</span>运行与修改示例</h2>
@@ -100,7 +111,7 @@ export function mountChapter(root: HTMLElement, index: number, chapter: Chapter,
     <section class="surface lesson-stage chapter-practice"><h2 id="chapter-practice" tabindex="-1"><span>3</span>分层练习</h2><h3>基础理解</h3>
       ${questions.map(question => questionMarkup(index, question)).join('')}
       ${warmups.length ? '<div class="practice-level"><h3>热身（选做）</h3><ul class="practice-list">' + practiceList(warmups) + '</ul></div>' : ''}
-      ${exerciseLevels.map(level => `<div class="practice-level"><h3>${level}</h3><ul class="practice-list">
+      ${levels.map(level => `<div class="practice-level"><h3>${level}</h3><ul class="practice-list">
         ${practiceList(coding.filter(exercise => exercise.level === level && !exercise.warmup))}</ul></div>`).join('')}
     </section>
     <section class="surface lesson-stage chapter-mistakes"><h2 id="chapter-mistakes" tabindex="-1"><span>4</span>常见错误与总结</h2>
@@ -113,17 +124,17 @@ export function mountChapter(root: HTMLElement, index: number, chapter: Chapter,
       <details><summary>参考资料</summary><ul class="reading-list">${chapter.references.map(reference => `
         <li>${h(reference.note)} <a class="inline-link" href="${h(reference.url)}" target="_blank" rel="noopener noreferrer">${h(reference.title)} ↗</a></li>`).join('')}</ul></details>
     </section>
-    <div class="lesson-next">
-      ${index ? '<a class="button secondary" href="#learn/' + index + '">← 上一课</a>' : ''}
-      ${index < lessons.length - 1 ? '<a class="button secondary" href="#learn/' + (index + 2) + '">下一课 →</a>' :
+    <div class="lesson-next">${navigation ?? (index === undefined ? '' :
+      (index ? '<a class="button secondary" href="#learn/' + index + '">← 上一课</a>' : '') +
+      (index < lessons.length - 1 ? '<a class="button secondary" href="#learn/' + (index + 2) + '">下一课 →</a>' :
         '<a class="button secondary" href="#learn">查看综合项目 →</a>' +
         '<a class="button secondary" href="#bank/independent">章外练习 →</a>' +
-        '<a class="button primary" href="#project/ledger">开始结项任务 →</a>'}
+        '<a class="button primary" href="#project/ledger">开始结项任务 →</a>'))}
     </div>`;
   const select = must<HTMLSelectElement>(root, '.example-controls select');
   const sandbox = must(root, '[data-example-workspace]');
   const heading = must(root, '#example-workspace-title');
-  const lessonId = String(index + 1);
+  const lessonId = typeof id === 'number' ? String(id + 1) : 'advanced:' + id;
   let stopEditor = () => {};
 
   function mountExample(example: Example) {
@@ -148,7 +159,7 @@ export function mountChapter(root: HTMLElement, index: number, chapter: Chapter,
   }
 
   function updateStats() {
-    const stats = lessonStats(index);
+    const stats = chapterStats(chapter, index);
     must(root, '[data-lesson-completed]').textContent = '已完成 ' + stats.completed + ' / ' + stats.total + ' 练习';
     must(root, '[data-lesson-accuracy]').textContent = '作答正确率 ' + accuracy(stats.correctCount, stats.attemptCount) +
       ' · 已记录 ' + stats.attemptCount + ' 次作答';

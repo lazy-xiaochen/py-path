@@ -10,6 +10,9 @@ import { ledgerCapstone } from './lessons/capstone.ts';
 import type { OutputComparison } from './judge';
 import type { ProblemOrigin, SolutionGuide } from './teaching-types';
 import type { CaseChecks, TaskContract, TaskFile } from './assessment-types';
+import { advancedProblems } from './advanced.ts';
+import { gradesProject } from './lessons/advanced/grades-project.ts';
+import { libraryProject } from './lessons/advanced/library-project.ts';
 
 export type Sample = [input: string, output: string, explanation: string, checks?: CaseChecks];
 export type TestCase = [input: string, output: string, checks?: CaseChecks];
@@ -213,6 +216,8 @@ export const problems: Problem[] = [
   ...independentProblems,
 ];
 
+export const allProblems: Problem[] = [...problems, ...advancedProblems];
+
 function quiz(question: string, choices: string[], answer: number, feedback: string): Quiz {
   return { question, choices, answer, feedback };
 }
@@ -293,9 +298,18 @@ export const lessons: Lesson[] = [
     mistake: '用一个样例判断正确性。额外构造最小规模、刚好相等和多个并列的测试。' },
 ];
 
-type Project = {
+export type ProjectBrief = {
+  requirements: string[];
+  design: string[];
+  stages: { title: string; work: string; check: string }[];
+  checklist: string[];
+  extensions: string[];
+};
+
+export type Project = {
   id: string; title: string; tags: string; description: string; steps: string[];
   input: string; expected: string; acceptance: string; files: TaskFile[]; solution: string; assessment?: Problem;
+  brief?: ProjectBrief;
 };
 
 export const projects: Project[] = [
@@ -312,4 +326,6 @@ export const projects: Project[] = [
     files: [{ name: 'main.py', content: '# 文本词频统计\nimport re\n\n# 读取 article.txt，再统计与排序\n' },
       { name: 'article.txt', content: 'Wind over the bridge. Wind under the bridge? No: wind and rain.\n' }],
     solution: 'import re\n\nlimit = int(input())\nwith open("article.txt", encoding="utf-8") as article:\n    words = re.findall(r"[a-z]+", article.read().lower())\ncounts = {}\nfor word in words:\n    counts[word] = counts.get(word, 0) + 1\nif not counts:\n    print("空文本")\nelse:\n    ranked = sorted(counts, key=lambda word: (-counts[word], word))\n    for word in ranked[:limit]:\n        print(word, counts[word])' },
+  gradesProject,
+  libraryProject,
 ];

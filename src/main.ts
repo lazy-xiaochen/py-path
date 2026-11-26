@@ -1,9 +1,11 @@
 import './style.css';
 import { mountChapter } from './chapter-page';
+import { advancedLessonRoute, advancedLessons, advancedModuleRoute, advancedModules,
+  type AdvancedLesson, type AdvancedModule } from './advanced';
 import { chapters } from './chapters';
-import { lessons, practiceTiers, problems, projects } from './content';
+import { allProblems, lessons, practiceTiers, projects } from './content';
 import { workspaceConsole } from './execution';
-import { accuracy, lessonStats, problemsForLesson } from './learning';
+import { accuracy, chapterStats, lessonStats, problemsForLesson } from './learning';
 import { problemPage, problemLink, personal, difficultyClass, originLabel } from './problem-page';
 import { data, progress, save, storageFailed, type Workspace } from './storage';
 import { mountThemeToggle } from './theme';
@@ -12,9 +14,9 @@ import { badge, codeBlock, h, must } from './ui';
 const app = must(document, '#app');
 let dispose = () => {};
 const nav = [
-  ['learn', '从零开始', '按章节读懂示例，动手改写，再独立解题。', '12 节课程', 'green', '▤'],
-  ['bank', '题库练习', '查找练习题，运行样例并提交评测。', problems.length + ' 道题', 'blue', '⌘'],
-  ['review', '专项复习', '速查知识点和典型错误，重做错题。', '12 个知识点', 'purple', '↺'],
+  ['learn', '从零开始', '按章节读懂示例，动手改写，再独立解题。', '基础篇与进阶篇', 'green', '▤'],
+  ['bank', '题库练习', '查找练习题，运行样例并提交评测。', allProblems.length + ' 道题', 'blue', '⌘'],
+  ['review', '专项复习', '速查知识点和典型错误，重做错题。', (lessons.length + advancedLessons.length) + ' 个知识点', 'purple', '↺'],
   ['lab', '在线工作台', '在浏览器编辑并运行多文件 Python。', '多文件编辑', 'orange', '›_'],
 ];
 
@@ -23,13 +25,14 @@ export function link(href: string, label: string, className = 'button') {
 }
 
 export function layout(route: string, body: string) {
-  const active = route === 'problem' ? 'bank' : route === 'project' ? 'learn' : route;
+  const active = route === 'problem' ? 'bank' : route === 'project' || route === 'projects' ? 'learn' : route;
   app.innerHTML = `
     <a href="#main-content" class="skip">跳过导航</a>
     <header class="site-header"><div class="site-width header-inner">
       <a class="brand" href="#home" aria-label="Py径首页"><span class="brand-icon" aria-hidden="true">›_</span><strong>Py径</strong></a>
-      <nav aria-label="主导航">${nav.map(([id, label]) =>
-        '<a href="#' + id + '"' + (active === id ? ' aria-current="page"' : '') + '>' + label + '</a>').join('')}</nav>
+      <nav aria-label="主导航">${nav.map(([id, label, , , , icon]) =>
+        '<a href="#' + id + '"' + (active === id ? ' aria-current="page"' : '') + '><span class="nav-icon" aria-hidden="true">' +
+        icon + '</span>' + label + '</a>').join('')}</nav>
       <div class="header-tools">
         <span class="local-state" id="local-storage">${storageFailed ? '本地存储不可用或已满' : '仅本地保存'}</span>
         <button type="button" class="theme-toggle" aria-label="浅色主题"><span class="theme-icon" aria-hidden="true"></span><span class="theme-label" aria-hidden="true"></span></button>
@@ -47,27 +50,55 @@ const title = (heading: string, description: string) =>
 
 function projectCards() {
   return '<div class="project-grid">' + projects.map(project => `
-    <a class="surface project-card" href="#project/${project.id}">
+    <a class="surface project-card" href="#project/${project.id}"><span class="project-art" aria-hidden="true"></span>
       <span class="tag">${h(project.tags)}${project.assessment && data.solved[project.id] ? ' · 已通过' : ''}</span><h3>${h(project.title)}</h3>
       <p>${h(project.description)}</p><span class="card-arrow" aria-hidden="true">↗</span>
     </a>`).join('') + '</div>';
 }
 const projectSection = () => '<section class="home-section"><div class="section-heading"><h2>综合项目</h2></div>' + projectCards() + '</section>';
 
+function lessonGrid(courses: { route: string; tag: string; title: string; completed: number; total: number }[],
+  heading: 'h2' | 'h3' | 'h4') {
+  return '<div class="lesson-grid">' + courses.map((course, index) => `
+    <a class="surface lesson-card" href="#${course.route}"><span class="lesson-number">${String(index + 1).padStart(2, '0')}</span>
+      <div><span class="muted">${h(course.tag)}</span><${heading}>${h(course.title)}</${heading}></div>
+      <span class="tag">${course.completed} / ${course.total}</span>
+      <span class="lesson-meter" aria-hidden="true"><i style="width: ${course.total ? Math.round(course.completed / course.total * 100) : 0}%"></i></span></a>`).join('') + '</div>';
+}
+
+function advancedCourseGrid(courses: AdvancedLesson[], heading: 'h3' | 'h4',
+  stats = courses.map(lesson => chapterStats(lesson.chapter))) {
+  return lessonGrid(courses.map((lesson, index) => ({
+    ...stats[index], tag: lesson.tag, title: lesson.title, route: advancedLessonRoute(lesson),
+  })), heading);
+}
+
+function advancedCourseSection() {
+  return `<section class="home-section" aria-labelledby="advanced-courses-title">
+    <div class="section-heading"><h2 id="advanced-courses-title" tabindex="-1">第二阶段 · Python 进阶</h2></div>
+    <div class="advanced-stage">${advancedModules.map((module, position) => `<section class="advanced-module" aria-labelledby="module-${module.slug}">
+      <div class="section-heading"><div class="module-title">
+        <span class="module-mark" data-tone="${position % 3}" aria-hidden="true">${['{ }', '[…]', 'ƒ()'][position % 3]}</span>
+        <h3 id="module-${module.slug}">${h(module.title)}</h3><span class="module-count" aria-hidden="true">${module.lessons.length} 节课</span></div>
+        ${link(advancedModuleRoute(module), '模块介绍与测评 →', 'inline-link')}</div>
+      ${advancedCourseGrid(module.lessons, 'h4')}
+    </section>`).join('')}</div>
+  </section>`;
+}
+
 function home() {
   // Unaltered Python language logo, a PSF trademark: https://www.python.org/community/logos/
   const pythonLogo = new URL('./assets/python-logo-only.png', import.meta.url).href;
   const states = lessons.map((_, index) => lessonStats(index));
-  const complete = states.filter(stats => stats.completed === stats.total).length;
   const next = states.findIndex(stats => stats.completed < stats.total);
   const nextHref = 'learn/' + ((next < 0 ? 0 : next) + 1);
   layout('home', `
     <section class="hero">
       <div class="hero-copy">
-        <div class="hero-label"><span></span> 中文 Python 学习实验室</div>
+        <div class="hero-label"><span></span><b class="hero-badge" aria-hidden="true">Python 3.12</b> 中文 Python 学习实验室</div>
         <h1>从第一行代码，<br>到<span>独立解题。</span></h1>
         <p>跟着课程读懂代码、动手运行，再用题目检验掌握程度。已有基础也可以直接刷题，随时回顾错题。</p>
-        <div class="hero-actions">${link(nextHref, next > 0 ? '继续学习　→' : '开始第一课　→', 'button primary')}${link('bank', '浏览题库', 'button secondary')}</div>
+        <div class="hero-actions">${link(nextHref, next > 0 ? '继续学习　→' : '开始第一课　→', 'button primary')}${link(advancedLessonRoute(advancedLessons[0]), '学习进阶篇', 'button secondary')}${link('projects', '综合项目', 'button secondary')}${link('bank', '浏览题库', 'button secondary')}</div>
       </div>
       <div class="hero-visual" aria-label="Python 示例，计算代码练习次数">
         <div class="preview-window">
@@ -88,23 +119,41 @@ function home() {
           </div>
         </div>
       </div>
+      <div class="hero-stats" aria-hidden="true">
+        <div><strong>${lessons.length}</strong><span>节基础课程</span></div>
+        <div><strong>${advancedLessons.length}</strong><span>节进阶课程</span></div>
+        <div><strong>${allProblems.length}</strong><span>道题</span></div>
+        <div><strong>${projects.length}</strong><span>个综合项目</span></div>
+      </div>
     </section>
     <section class="home-section">
       <div class="section-heading"><h2>选择你的学习方式</h2></div>
       <div class="entry-grid">${nav.map(([id, label, description, metric, color, icon]) => `
         <a class="surface entry-card ${color}" href="#${id}">
+          <span class="entry-glow" aria-hidden="true"></span>
           <span class="entry-icon" aria-hidden="true">${icon}</span><span class="card-arrow" aria-hidden="true">↗</span>
           <h3>${label}</h3><p>${description}</p><span class="entry-metric">${metric}</span>
         </a>`).join('')}</div>
     </section>
-    <section class="home-section">
-      <div class="section-heading"><h2>学习路径</h2>${link('learn', '查看完整路线 →', 'inline-link')}</div>
-      <div class="surface track-panel">
-        <div><strong>课程进度</strong><p class="muted">已完成 ${complete} / ${lessons.length} 节</p></div>
-        <progress max="${lessons.length}" value="${complete}" aria-label="课程进度"></progress>
-        ${link(nextHref, complete === 12 ? '回顾课程' : '进入下一课', 'button secondary')}
+    <section class="home-section" aria-hidden="true">
+      <div class="feature-strip">
+        <div class="surface feature-card">
+          <div class="feature-visual"><span class="fv-pill">Python 3.12</span><span class="fv-pill muted">WASM 隔离沙箱</span></div>
+          <h3>打开浏览器即写即跑</h3>
+          <p>内置独立 Python 运行环境，无需本地安装配置，支持多文件编辑与标准输入。</p>
+        </div>
+        <div class="surface feature-card">
+          <div class="feature-visual"><span class="fv-verdict ac">AC</span><span class="fv-verdict wa">WA</span><span class="fv-verdict re">RE</span><span class="fv-verdict tle">TLE</span><span class="fv-verdict ole">OLE</span></div>
+          <h3>即时评测与报错定位</h3>
+          <p>支持样例试跑与多组用例评测，运行出错直接给出中文说明并定位到对应代码行。</p>
+        </div>
+        <div class="surface feature-card">
+          <div class="feature-visual"><span class="fv-dot"></span><code>localStorage · 深/浅主题</code></div>
+          <h3>纯本地保存 · 随时回顾</h3>
+          <p>代码草稿、提交记录与错题自动保存在本地浏览器，不上传任何个人数据。</p>
+        </div>
       </div>
-    </section>${projectSection()}`);
+    </section>`);
 }
 
 function learn() {
@@ -114,10 +163,78 @@ function learn() {
   const all = states.reduce((sum, state) => sum + state.total, 0);
   layout('learn', title('从零开始', '从标准输入输出到综合解题。按路线前进，或直接进入感兴趣的章节。') +
     '<p class="learning-overview muted">已完成 ' + finished + ' / ' + lessons.length + ' 节课 · 已完成 ' + done + ' / ' + all + ' 个学习检查与练习</p>' +
-    '<div class="lesson-grid">' + lessons.map((lesson, index) => `
-      <a class="surface lesson-card" href="#learn/${index + 1}"><span class="lesson-number">${String(index + 1).padStart(2, '0')}</span>
-        <div><span class="muted">${lesson.tag}</span><h2>${lesson.title}</h2></div>
-        <span class="tag">${states[index].completed} / ${states[index].total}</span></a>`).join('') + '</div>' + projectSection());
+    '<section id="foundation-courses" aria-label="基础篇课程">' + lessonGrid(lessons.map((lesson, index) => ({
+      ...states[index], tag: lesson.tag, title: lesson.title, route: 'learn/' + (index + 1),
+    })), 'h2') + '</section>' + advancedCourseSection() + projectSection());
+}
+
+function projectsPage() {
+  layout('projects', link('home', '← 返回首页', 'inline-link') +
+    title('综合项目', '把所学知识串联成完整程序，按验收标准调试并提交。') +
+    projectCards());
+}
+
+function advancedOverview() {
+  layout('learn', link('learn', '← 基础篇', 'inline-link') +
+    title('第二阶段 · Python 进阶与编程能力提升', '完成基础篇后，按数据结构、表达方式、函数机制和程序设计的顺序继续学习。') +
+    `<section class="home-section">
+      <div class="project-grid">
+        ${advancedModules.map(module => `<a class="surface project-card" href="#${advancedModuleRoute(module)}">
+          <span class="tag">${module.lessons.length} 节课</span><h3>${h(module.title)}</h3>
+          <p>${h(module.introduction)}</p><span class="card-arrow" aria-hidden="true">↗</span></a>`).join('')}
+      </div>
+    </section>`);
+}
+
+function advancedModuleOverview(module: AdvancedModule) {
+  const stats = module.lessons.map(lesson => chapterStats(lesson.chapter));
+  const total = stats.reduce((sum, stat) => sum + stat.total, 0);
+  const done = stats.reduce((sum, stat) => sum + stat.completed, 0);
+  const next = advancedModules[advancedModules.indexOf(module) + 1];
+  const list = (values: string[]) => '<ul>' + values.map(value => '<li>' + h(value) + '</li>').join('') + '</ul>';
+  layout('learn', link('learn', '← 学习路径', 'inline-link') +
+    title(module.title, module.introduction) +
+    `<section class="surface lesson-stage chapter-overview">
+      <div class="section-heading"><h2>学习目标</h2><span class="tag">已完成 ${done} / ${total} 项</span></div>
+      ${list(module.goals)}
+      <h3>前置知识</h3><p>${h(module.prerequisites)}</p>
+    </section>
+    <section class="home-section"><div class="section-heading"><h2>课程顺序</h2>
+      ${link('bank/advanced', '进阶题库 →', 'inline-link')}</div>
+      ${advancedCourseGrid(module.lessons, 'h3', stats)}
+    </section>
+    <section class="surface lesson-stage chapter-overview home-section">
+      <h2>知识关联与阶段测评</h2>
+      <figure class="chapter-diagram"><figcaption>${h(module.mapCaption)}</figcaption>${codeBlock(module.map)}</figure>
+      ${list(module.summary)}
+      <ul class="practice-list">${[...module.practice, module.assessment].map(item => `<li>
+        <div>${link('problem/' + item.id, item.label, 'inline-link')}<p>${h(item.criterion)}</p></div>
+        <span class="tag">${data.solved[item.id] ? '已通过' : data.mistakes[item.id] ? '待重做' : '待练习'}</span>
+      </li>`).join('')}</ul>
+      <h3>章外迁移测评</h3>
+      <ul class="practice-list"><li>
+        <div>${link('problem/' + module.transfer.id, module.transfer.label, 'inline-link')}<p>${h(module.transfer.criterion)}</p></div>
+        <span class="tag" data-transfer-status>${data.solved[module.transfer.id] ? '已通过' : data.mistakes[module.transfer.id] ? '待重做' : '待练习'}</span>
+      </li></ul>
+    </section>${next ? `<div class="lesson-next">${link(advancedModuleRoute(next), '下一模块 · ' + h(next.title) + ' →', 'button secondary')}</div>` : ''}`);
+}
+
+function advancedLessonPage(module: AdvancedModule, index: number, questionId?: string) {
+  const lesson = module.lessons[index];
+  const previous = module.lessons[index - 1];
+  const next = module.lessons[index + 1];
+  const moduleRoute = advancedModuleRoute(module);
+  const directory = `<aside class="surface lesson-aside"><h2>课程目录</h2>${advancedModules.map(group =>
+    `<h3>${h(group.title)}</h3>` + group.lessons.map((item, position) =>
+      `<a href="#${advancedLessonRoute(item)}" ${item.slug === lesson.slug ? 'aria-current="page"' : ''}><span>${String(position + 1).padStart(2, '0')}</span>${h(item.title)}</a>`).join('')).join('')}</aside>`;
+  const main = layout('learn', '<div class="lesson-hero">' + link(moduleRoute, '← ' + h(module.title), 'inline-link') +
+    title('第 ' + (index + 1) + ' 课 · ' + lesson.title, '第二阶段 · ' + module.title) + '</div>' +
+    '<div class="lesson-layout">' + directory + '<div class="lesson-body" data-chapter></div></div>');
+  const navigation = (previous ? link(advancedLessonRoute(previous), '← 上一课', 'button secondary') : '') +
+    (next ? link(advancedLessonRoute(next), '下一课 →', 'button secondary') :
+      link('problem/' + module.assessment.id, '开始课内阶段测评 →', 'button primary') +
+      link('problem/' + module.transfer.id, '开始章外迁移测评 →', 'button secondary') + link(moduleRoute, '返回模块', 'button secondary'));
+  dispose = mountChapter(must(main, '[data-chapter]'), lesson.slug, lesson.chapter, questionId, navigation);
 }
 
 function lessonDirectory(index: number) {
@@ -130,8 +247,8 @@ function lessonPage(index: number, focus?: string) {
   const lesson = lessons[index];
   const chapter = chapters[lesson.tag];
   if (chapter) {
-    const main = layout('learn', link('learn', '← 学习路径', 'inline-link') +
-      title('第 ' + (index + 1) + ' 课 · ' + lesson.title, lesson.tag) +
+    const main = layout('learn', '<div class="lesson-hero">' + link('learn', '← 学习路径', 'inline-link') +
+      title('第 ' + (index + 1) + ' 课 · ' + lesson.title, lesson.tag) + '</div>' +
       '<div class="lesson-layout">' + lessonDirectory(index) + '<div class="lesson-body" data-chapter></div></div>');
     dispose = mountChapter(must(main, '[data-chapter]'), index, chapter, focus);
     return;
@@ -141,8 +258,8 @@ function lessonPage(index: number, focus?: string) {
     <fieldset class="quiz" data-quiz="${name}"><legend>${h(lesson[name].question)}</legend>
       ${lesson[name].choices.map((choice, i) => '<button type="button" class="button secondary" data-answer="' + i + '">' + h(choice) + '</button>').join('')}
       <p class="quiz-feedback" role="status">${complete ? '已通过知识检查。' : ''}</p></fieldset>`;
-  const main = layout('learn', link('learn', '← 学习路径', 'inline-link') +
-    title('第 ' + (index + 1) + ' 课 · ' + lesson.title, lesson.tag) + `
+  const main = layout('learn', '<div class="lesson-hero">' + link('learn', '← 学习路径', 'inline-link') +
+    title('第 ' + (index + 1) + ' 课 · ' + lesson.title, lesson.tag) + '</div>' + `
     <div class="lesson-layout">
       ${lessonDirectory(index)}
       <div class="lesson-body">
@@ -184,16 +301,20 @@ function lessonPage(index: number, focus?: string) {
   });
 }
 
-function bank(initialTag = '', initialScope = '') {
+function bank(initialTag = '', initialScope = '', initialStage = '') {
+  const tags = [...lessons, ...advancedLessons].map(lesson => lesson.tag);
+  const advancedTags = new Set(advancedLessons.map(lesson => lesson.tag));
   const main = layout('bank', title('题库练习', '运行可自行测试，提交评测后记录学习结果。') + `
-    <div class="hero-actions">${link('bank/independent', '章外练习', 'button secondary')}
+    <div class="hero-actions">${link('bank/advanced', '进阶练习', 'button secondary')}${link('bank/independent', '章外练习', 'button secondary')}
       ${practiceTiers.map(tier => link('bank/independent/' + encodeURIComponent(tier), tier, 'button secondary')).join('')}</div>
     <section class="surface bank-panel">
       <div class="filters">
         <label>搜索题目<input type="search" id="search" placeholder="题号、标题或知识点"></label>
         <label>练习范围<select id="scope"><option value="">全部练习</option><option value="chapter">章内</option>
           <option value="independent">全部章外</option>${practiceTiers.map(tier => '<option>' + tier + '</option>').join('')}</select></label>
-        <label>知识点<select id="tag"><option value="">全部知识点</option>${lessons.map(lesson => '<option>' + lesson.tag + '</option>').join('')}</select></label>
+        <label>学习阶段<select id="stage"><option value="">全部阶段</option><option value="foundation">基础篇</option>
+          <option value="advanced">进阶篇</option></select></label>
+        <label>知识点<select id="tag"><option value="">全部知识点</option>${tags.map(tag => '<option>' + h(tag) + '</option>').join('')}</select></label>
         <label>难度<select id="difficulty"><option value="">全部难度</option><option>入门</option><option>基础</option><option>进阶</option></select></label>
         <label>来源<select id="origin"><option value="">全部来源</option><option>原创</option><option>经典改编</option></select></label>
         <label>完成状态<select id="completion"><option value="">全部状态</option><option>未开始</option><option>已尝试</option><option>已通过</option><option>待重做</option></select></label>
@@ -201,19 +322,22 @@ function bank(initialTag = '', initialScope = '') {
     </section>`);
   const search = must<HTMLInputElement>(main, '#search');
   const scope = must<HTMLSelectElement>(main, '#scope');
+  const stage = must<HTMLSelectElement>(main, '#stage');
   const tag = must<HTMLSelectElement>(main, '#tag');
   const difficulty = must<HTMLSelectElement>(main, '#difficulty');
   const origin = must<HTMLSelectElement>(main, '#origin');
   const completion = must<HTMLSelectElement>(main, '#completion');
-  tag.value = lessons.some(lesson => lesson.tag === initialTag) ? initialTag : '';
+  tag.value = tags.includes(initialTag) ? initialTag : '';
   scope.value = initialScope;
+  stage.value = initialStage;
   function filter() {
     const keyword = search.value.trim().toLowerCase();
-    const items = problems.filter(problem =>
-      [problem.id, problem.title, problem.tag, ...(problem.origin?.kind === 'adapted' ?
+    const items = allProblems.filter(problem =>
+      [problem.id, problem.title, problem.tag, ...(problem.guide?.concepts ?? []), ...(problem.origin?.kind === 'adapted' ?
         [problem.origin.title, problem.origin.platform, problem.origin.id] : [])].join(' ').toLowerCase().includes(keyword) &&
       (!scope.value || (scope.value === 'chapter' ? !problem.practice :
         scope.value === 'independent' ? !!problem.practice : scope.value === problem.practice?.tier)) &&
+      (!stage.value || (stage.value === 'advanced') === advancedTags.has(problem.tag)) &&
       (!tag.value || problem.tag === tag.value) && (!difficulty.value || problem.difficulty === difficulty.value) &&
       (!origin.value || originLabel(problem) === origin.value) &&
       (!completion.value || (completion.value === '待重做' ? data.mistakes[problem.id] : personal(problem) === completion.value)));
@@ -232,10 +356,17 @@ function bank(initialTag = '', initialScope = '') {
 
 function review() {
   const projectProblems = projects.flatMap(project => project.assessment ?? []);
-  const wrong = [...problems, ...projectProblems].filter(problem => data.mistakes[problem.id]);
-  const questions = lessons.flatMap((lesson, index) => (chapters[lesson.tag]?.exercises ?? []).flatMap(exercise =>
+  const wrong = [...allProblems, ...projectProblems].filter(problem => data.mistakes[problem.id]);
+  const reviewLessons = [
+    ...lessons.map((lesson, index) => ({ ...lesson, chapter: chapters[lesson.tag], route: 'learn/' + (index + 1),
+      bankRoute: 'bank/' + encodeURIComponent(lesson.tag), stats: lessonStats(index) })),
+    ...advancedLessons.map(lesson => ({ ...lesson, route: advancedLessonRoute(lesson),
+      bankRoute: 'bank/advanced/' + encodeURIComponent(lesson.tag), stats: chapterStats(lesson.chapter),
+      theory: '', mistake: '' })),
+  ];
+  const questions = reviewLessons.flatMap(lesson => (lesson.chapter?.exercises ?? []).flatMap(exercise =>
     exercise.kind === 'question' && data.questions[exercise.id] && data.questions[exercise.id].lastChoice !== exercise.answer ?
-      [{ exercise, index, tag: lesson.tag }] : []));
+      [{ exercise, route: lesson.route, tag: lesson.tag }] : []));
   const count = wrong.length + questions.length;
   layout('review', title('专项复习', '回顾自己卡住的知识点，并用错题验证修正。') + `
     <section class="surface bank-panel"><div class="section-heading"><h2>错题重做</h2><span class="tag">${count} 道待重做</span></div>
@@ -244,18 +375,17 @@ function review() {
           ${badge(data.attempts[problem.id][0].verdict)}${projectProblems.includes(problem) ?
             link('project/' + problem.id, '重做结项', 'button secondary') :
             link('problem/' + problem.id, '重做 ' + problem.id, 'button secondary')}</div>`).join('') +
-        questions.map(({ exercise, index, tag }) => `<div><span class="tag">${h(tag)}</span><strong>${h(exercise.goal)}</strong>
-          ${link('learn/' + (index + 1) + '/' + exercise.id, '重做知识题', 'button secondary')}</div>`).join('') +
+        questions.map(({ exercise, route, tag }) => `<div><span class="tag">${h(tag)}</span><strong>${h(exercise.goal)}</strong>
+          ${link(route + '/' + exercise.id, '重做知识题', 'button secondary')}</div>`).join('') +
         '</div>' : '<p class="empty">暂无待重做的题目。答错知识题或提交评测遇到错误后，可从这里继续练习。</p>'}</section>
     <section class="home-section"><div class="section-heading"><h2>知识点速查</h2></div>
       <p class="muted learning-overview">正确率根据已记录的知识题答案和编程提交计算。</p>
-      <div class="review-grid">${lessons.map((lesson, index) => {
-        const stats = lessonStats(index);
-        const chapter = chapters[lesson.tag];
+      <div class="review-grid">${reviewLessons.map(lesson => {
+        const { chapter, stats } = lesson;
         return `<article class="surface review-card">
         <h3>${lesson.tag}</h3><p class="topic-progress">${stats.completed} / ${stats.total} 已完成 · 正确率 ${accuracy(stats.correctCount, stats.attemptCount)}</p>
         <p>${h(chapter?.summary[0] ?? lesson.theory)}</p><h4>典型错误</h4><p>${h(chapter?.mistakes[0].fix ?? lesson.mistake)}</p>
-        <div>${link('learn/' + (index + 1), '复习课程', 'inline-link')}${link('bank/' + encodeURIComponent(lesson.tag), '专项练习 →', 'inline-link')}</div>
+        <div>${link(lesson.route, '复习课程', 'inline-link')}${link(lesson.bankRoute, '专项练习 →', 'inline-link')}</div>
       </article>`; }).join('')}</div></section>`);
 }
 
@@ -264,7 +394,7 @@ function lab(project?: typeof projects[number]) {
     const workspace = data.projects[project.id] ??= {
       files: project.files.map(file => ({ ...file })), active: 'main.py', entry: 'main.py', input: project.input,
     };
-    dispose = problemPage(project.assessment, false, layout('project', ''), workspace);
+    dispose = problemPage(project.assessment, false, layout('project', ''), workspace, project.brief);
     return;
   }
   const main = layout(project ? 'project' : 'lab', (project ? link('learn', '← 学习路径', 'inline-link') : '') +
@@ -291,12 +421,21 @@ function lab(project?: typeof projects[number]) {
 function render() {
   dispose();
   dispose = () => {};
-  const [route, param, action] = location.hash.slice(1).split('/');
-  const problem = problems.find(item => item.id === param);
+  const [route, param, action, focus] = location.hash.slice(1).split('/');
+  const problem = allProblems.find(item => item.id === param);
   const project = projects.find(item => item.id === param);
   const lesson = Number(param) - 1;
+  const module = route === 'learn' && param === 'advanced' && action ?
+    advancedModules.find(item => item.slug === action || item.lessons.some(lesson => lesson.slug === action)) : undefined;
   if (!route || route === 'home') home();
   else if (route === 'learn' && !param) learn();
+  else if (route === 'projects') projectsPage();
+  else if (route === 'learn' && param === 'advanced' && !action) advancedOverview();
+  else if (module) {
+    const index = module.lessons.findIndex(lesson => lesson.slug === action);
+    if (index < 0) advancedModuleOverview(module);
+    else advancedLessonPage(module, index, focus);
+  }
   else if (route === 'learn' && Number.isInteger(lesson) && lessons[lesson]) lessonPage(lesson, action);
   else if (route === 'bank') {
     let tag = '';
@@ -304,6 +443,10 @@ function render() {
     if (tag === 'independent') {
       const tier = practiceTiers.find(item => encodeURIComponent(item) === action || item === action);
       bank('', tier ?? 'independent');
+    } else if (tag === 'advanced') {
+      let topic = '';
+      try { topic = decodeURIComponent(action ?? ''); } catch { /* malformed fragment */ }
+      bank(topic, '', 'advanced');
     } else bank(tag);
   }
   else if (route === 'review') review();
@@ -312,6 +455,24 @@ function render() {
   else if (route === 'project' && project) lab(project);
   else layout('', title('页面未找到', '请从首页选择学习入口。') + link('home', '返回首页'));
   window.scrollTo(0, 0);
+
+  const directory = app.querySelector<HTMLElement>('.lesson-aside');
+  const lessonLayout = directory?.closest<HTMLElement>('.lesson-layout');
+  if (directory && lessonLayout) {
+    const updateDirectoryHeight = () => {
+      const top = Math.ceil(lessonLayout.getBoundingClientRect().top);
+      directory.style.setProperty('--lesson-directory-top', top + 'px');
+    };
+    updateDirectoryHeight();
+    const listeners = new AbortController();
+    addEventListener('scroll', updateDirectoryHeight, { passive: true, signal: listeners.signal });
+    addEventListener('resize', updateDirectoryHeight, { signal: listeners.signal });
+    const disposeLesson = dispose;
+    dispose = () => {
+      listeners.abort();
+      disposeLesson();
+    };
+  }
 }
 
 addEventListener('hashchange', render);

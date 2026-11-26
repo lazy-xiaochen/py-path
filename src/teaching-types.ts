@@ -26,20 +26,29 @@ export type Question = {
 };
 
 export const exerciseLevels = ['基础编程', '综合应用', '拓展挑战'] as const;
+export const advancedExerciseLevels = ['基础编程', '独立编程', '综合应用', '拓展挑战'] as const;
 export type CodingExercise = {
   kind: 'coding';
   problem: string;
-  level: typeof exerciseLevels[number];
+  level: typeof advancedExerciseLevels[number];
   goal: string;
   starterExample?: string;
   warmup?: boolean;
 };
 
 export type Chapter = {
+  introduction?: string;
   goals: string[];
   prerequisites: string;
   version: string;
-  topics: { title: string; explanation: string[]; examples: Example[] }[];
+  topics: {
+    title: string;
+    explanation: string[];
+    examples: Example[];
+    diagram?: { caption: string; text: string };
+  }[];
+  comparisons?: { headings: [string, string, string]; rows: [string, string, string][] };
+  applications?: string[];
   exercises: (Question | CodingExercise)[];
   mistakes: { symptom: string; reason: string; fix: string; check: string }[];
   summary: string[];

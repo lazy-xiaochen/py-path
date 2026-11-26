@@ -5,3 +5,19 @@ public/runtime/
 playwright-report/
 test-results/
 .browser-profile/
+
+# Local credentials and configuration
+.env
+.env.*
+.envrc
+.npmrc
+.netrc
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Local logs and system files
+*.log
+.DS_Store
+Thumbs.db

@@ -3,6 +3,7 @@ import { defineConfig } from '@playwright/test';
 export default defineConfig({
   testDir: './tests',
   testMatch: '**/*.spec.ts',
+  testIgnore: '**/runtime-audit.spec.ts',
   timeout: 135000,
   expect: { timeout: 45000 },
   fullyParallel: true,

@@ -1,9 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
+import { loadPyodide } from 'pyodide';
 import { exactOutputDifference, normalizeOutput } from '../src/judge.ts';
 import { lessons, problems, projects } from '../src/content.ts';
 import { chapterExamples, chapters } from '../src/chapters.ts';
-import { exerciseLevels } from '../src/teaching-types.ts';
+import { advancedExerciseLevels, exerciseLevels } from '../src/teaching-types.ts';
+import { advancedLessons, advancedModules, advancedProblems } from '../src/advanced.ts';
+import type { CaseChecks } from '../src/assessment-types.ts';
 
 test('输出匹配只忽略换行符差异、行尾空白和末尾空行', () => {
   assert.equal(normalizeOutput('  a  b \r\n\r\nc\t\r\n \n'), '  a  b\n\nc');
@@ -34,7 +37,7 @@ test('精确比较统一换行，允许省略一个结束换行并保留其余�
 test('每课有两种知识检查、两道对应原创题及多组输入', () => {
   assert.equal(lessons.length, 12);
   assert.ok(problems.length >= 24);
-  assert.equal(projects.length, 2);
+  assert.deepEqual(projects.map(project => project.id), ['ledger', 'words', 'grade-analysis', 'library-loans']);
   assert.equal(new Set(problems.map(problem => problem.id)).size, problems.length);
   lessons.forEach((lesson, index) => {
     assert.equal(problems[index * 2].tag, lesson.tag);
@@ -125,6 +128,153 @@ test('章外梯度独立于课程进度，特殊契约具备完整样例与验�
       if (task.contract?.target) assert.ok(checks.calls?.length, task.id);
       if (task.contract?.kind === 'file' || task.id === 'ledger') assert.ok(checks.artifacts?.length, task.id);
     }
+  }
+});
+
+test('进阶课练习接入对应知识点且学习记录标识唯一', () => {
+  const foundationIds = Object.values(chapters).flatMap(chapter => chapter?.exercises.flatMap(exercise =>
+    exercise.kind === 'question' ? [exercise.id] : [exercise.problem]) ?? []);
+  const exercises = advancedLessons.flatMap(lesson => lesson.chapter.exercises);
+  const ids = [...foundationIds, ...exercises.map(exercise => exercise.kind === 'question' ? exercise.id : exercise.problem)];
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(new Set(exercises.flatMap(exercise => exercise.kind === 'coding' ? [exercise.problem] : [])),
+    new Set(advancedProblems.filter(problem => !problem.practice).map(problem => problem.id)));
+  for (const lesson of advancedLessons) {
+    assert.ok(lesson.chapter.exercises.filter(exercise => exercise.kind === 'question' || !exercise.warmup).length >= 8, lesson.slug);
+    assert.ok(lesson.chapter.exercises.some(exercise => exercise.kind === 'question' && exercise.demonstration), lesson.slug);
+    assert.deepEqual(new Set(lesson.chapter.exercises.flatMap(exercise => exercise.kind === 'coding' ? [exercise.level] : [])),
+      new Set(advancedExerciseLevels));
+    assert.equal(new Set(chapterExamples(lesson.chapter).map(example => example.id)).size, chapterExamples(lesson.chapter).length);
+    for (const exercise of lesson.chapter.exercises) {
+      if (exercise.kind === 'question') {
+        assert.ok(exercise.options[exercise.answer]?.feedback, exercise.id);
+      } else {
+        const problem = advancedProblems.find(problem => problem.id === exercise.problem);
+        assert.equal(problem?.tag, lesson.tag, exercise.problem);
+        assert.ok(problem?.guide?.concepts.length && problem.guide.steps.length >= 3);
+        assert.ok(problem.cases.length >= 3);
+        const distinctCases: [string, CaseChecks?][] = [
+          [problem.sample[0], problem.sample[3]],
+          ...problem.cases.map(([input, , checks]): [string, CaseChecks?] => [input, checks]),
+        ];
+        const inputs = distinctCases.map(([input, checks]) => JSON.stringify([input, checks?.calls, checks?.fixtures]));
+        assert.equal(inputs.length, new Set(inputs).size, problem.id);
+      }
+    }
+  }
+  const slugs = [...advancedModules, ...advancedLessons].map(item => item.slug);
+  assert.equal(new Set(slugs).size, slugs.length);
+  assert.equal(new Set(advancedLessons.map(lesson => lesson.tag)).size, advancedLessons.length);
+  for (const module of advancedModules) {
+    const moduleProblemIds = module.lessons.flatMap(lesson => lesson.chapter.exercises.flatMap(exercise =>
+      exercise.kind === 'coding' ? [exercise.problem] : []));
+    for (const task of [...module.practice, module.assessment]) {
+      assert.ok(moduleProblemIds.includes(task.id), module.slug + ' · ' + task.id);
+    }
+    const transfer = advancedProblems.find(problem => problem.id === module.transfer.id);
+    assert.ok(transfer?.practice && transfer.origin?.kind === 'adapted' && transfer.cases.length >= 3, module.slug);
+    assert.ok(module.lessons.some(lesson => lesson.tag === transfer.tag));
+    assert.ok(!ids.includes(module.transfer.id));
+  }
+  assert.equal(new Set(advancedModules.map(module => module.transfer.id)).size, 4);
+});
+
+test('Pyodide 3.12 实跑全部进阶示例、读代码题、参考答案和两个进阶项目', async () => {
+  const python = await loadPyodide();
+  assert.equal(python.runPython('import sys; sys.version_info[:2] == (3, 12)'), true);
+  python.runPython(`
+import io
+import json
+import os
+import sys
+from contextlib import redirect_stdout, redirect_stderr
+from importlib import import_module
+from pathlib import Path
+from runpy import run_path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
+
+def capture(source, stdin, name, packed_args):
+    stdout = io.StringIO()
+    stderr = io.StringIO()
+    scope = {"__name__": "main" if name else "__main__"}
+    with patch("sys.stdin", io.StringIO(stdin)), redirect_stdout(stdout), redirect_stderr(stderr):
+        exec(compile(source, "main.py", "exec"), scope)
+        values = [scope[name](*args) for args in json.loads(packed_args)] if name else []
+    return json.dumps([stdout.getvalue(), stderr.getvalue(), values])
+
+def capture_project(files_json, stdin, target_json, checks_json, run_main):
+    stdout, stderr = io.StringIO(), io.StringIO()
+    calls_status = []
+    checks = json.loads(checks_json)
+    target = json.loads(target_json)
+    with TemporaryDirectory() as directory:
+        previous_cwd = os.getcwd()
+        try:
+            os.chdir(directory)
+            for source in json.loads(files_json) + checks.get("fixtures", []):
+                Path(source["name"]).write_text(source["content"], encoding="utf-8")
+            with patch.object(sys, "path", [directory, *sys.path]), patch.dict(sys.modules):
+                if target:
+                    with patch("sys.stdin", io.StringIO("")), redirect_stdout(stdout), redirect_stderr(stderr):
+                        fn = getattr(import_module(target["module"]), target["name"])
+                        calls_status = [fn(*call["args"]) for call in checks.get("calls", [])]
+                    assert not stdout.getvalue() and not stderr.getvalue(), "interface produced output"
+                if run_main:
+                    with patch("sys.stdin", io.StringIO(stdin)), redirect_stdout(stdout), redirect_stderr(stderr):
+                        run_path("main.py", run_name="__main__")
+            artifacts = [Path(item["name"]).read_bytes().decode("utf-8") for item in checks.get("artifacts", [])]
+            return json.dumps([stdout.getvalue(), stderr.getvalue(), calls_status, artifacts])
+        finally:
+            os.chdir(previous_cwd)
+`);
+  const capture = python.globals.get('capture');
+  const captureProject = python.globals.get('capture_project');
+  const result = (source: string, input: string, name = '', args: (string | number)[][] = []) =>
+    JSON.parse(capture(source, input, name, JSON.stringify(args)));
+  try {
+    for (const lesson of advancedLessons) {
+      for (const example of chapterExamples(lesson.chapter)) {
+        assert.deepEqual(result(example.source, example.input), [example.output, '', []], lesson.slug + '/' + example.id);
+      }
+      for (const exercise of lesson.chapter.exercises) {
+        if (exercise.kind !== 'question' || !exercise.demonstration) continue;
+        const example = exercise.demonstration;
+        assert.deepEqual(result(example.source, example.input), [example.output, '', []], exercise.id);
+      }
+    }
+    for (const problem of advancedProblems) {
+      const { sample, contract } = problem;
+      const cases = [[sample[0], sample[1], sample[3]] as const, ...problem.cases];
+      for (const [index, [input, expected, checks]] of cases.entries()) {
+        const label = problem.id + ' · 用例 ' + (index + 1);
+        if (contract?.kind === 'function') {
+          assert.ok(contract.target && checks?.calls?.length, label);
+          const files = JSON.stringify([{ name: 'main.py', content: problem.solution }]);
+          assert.deepEqual(JSON.parse(captureProject(files, input, JSON.stringify(contract.target), JSON.stringify(checks), false)),
+            [expected, '', checks.calls.map(call => call.expected), []], label);
+        } else {
+          assert.deepEqual(result(problem.solution, input), [expected, '', []], label);
+        }
+      }
+    }
+    for (const project of projects.filter(project => project.brief)) {
+      assert.ok(project.assessment?.contract, project.id);
+      assert.ok(project.brief!.stages.length >= 4 && project.brief!.checklist.length >= 2, project.id);
+      const { solution, solutionFiles, sample, cases, contract } = project.assessment;
+      const files = JSON.stringify([{ name: 'main.py', content: solution }, ...(solutionFiles ?? [])]);
+      const testCases: [input: string, expected: string, checks?: CaseChecks][] =
+        [[sample[0], sample[1], sample[3]], ...cases];
+      for (const [index, [input, expected, checks]] of testCases.entries()) {
+        assert.ok(checks?.artifacts?.length || checks?.calls?.length, project.id);
+        assert.deepEqual(JSON.parse(captureProject(files, input, JSON.stringify(contract.target ?? null), JSON.stringify(checks), true)),
+          [expected, '', checks.calls?.map(call => call.expected) ?? [], checks.artifacts?.map(file => file.content) ?? []],
+          project.id + ' · 用例 ' + (index + 1));
+      }
+    }
+  } finally {
+    capture.destroy();
+    captureProject.destroy();
   }
 });
 

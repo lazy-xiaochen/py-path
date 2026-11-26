@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "build": "npm run typecheck && vite build",
     "test": "node --disable-warning=ExperimentalWarning --test tests/unit.test.ts",
-    "test:e2e": "npm run build && playwright test"
+    "test:e2e": "npm run build && playwright test",
+    "test:e2e:audit": "vite build --mode runtime-audit && playwright test --config playwright.audit.config.ts"
   },
   "dependencies": {
     "codemirror": "6.0.2",
