@@ -5,6 +5,7 @@ public/runtime/
 playwright-report/
 test-results/
 .browser-profile/
+<<<<<<< HEAD
 
 # Local credentials and configuration
 .env
@@ -21,3 +22,7 @@ test-results/
 *.log
 .DS_Store
 Thumbs.db
+=======
+dist/
+.env
+>>>>>>> 0eb2e8ceef3f0d95db467ca2cb516afbfcf05743
